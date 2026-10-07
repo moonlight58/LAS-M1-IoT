@@ -1,0 +1,22 @@
+{
+  "name": "las",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.2.1",
+    "sqlite3": "^6.0.1",
+    "ws": "^8.22.0"
+  },
+  "allowScripts": {
+    "sqlite3@6.0.1": true,
+    "better-sqlite3@13.0.3": true
+  }
+}
