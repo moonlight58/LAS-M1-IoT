@@ -15,10 +15,16 @@
         max-width: 800px;
         margin: 20px auto;
       }
+      #status {
+        text-align: center;
+        font-size: 0.9em;
+        color: #888;
+      }
     </style>
   </head>
   <body>
     <h2 style="text-align: center">IoT Dashboard</h2>
+    <p id="status">Connexion…</p>
 
     <div class="chart-container">
       <canvas id="tempHumChart"></canvas>
@@ -30,83 +36,71 @@
 
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        // Chart ESP32
-        const ctxTemp = document
-          .getElementById("tempHumChart")
-          .getContext("2d");
-        const tempHumChart = new Chart(ctxTemp, {
-          type: "line",
-          data: {
-            labels: [],
-            datasets: [
-              {
-                label: "Temperature (°C)",
-                borderColor: "#ff4d4d",
-                backgroundColor: "#ff4d4d",
-                data: [],
-                fill: false,
-              },
-              {
-                label: "Humidity (%)",
-                borderColor: "#3399ff",
-                backgroundColor: "#3399ff",
-                data: [],
-                fill: false,
-              },
-            ],
-          },
-          options: { responsive: true, animation: false },
+        const MAX_POINTS = 20;
+
+        const makeDataset = (label, color) => ({
+          label,
+          borderColor: color,
+          backgroundColor: color,
+          data: [],
+          fill: false,
         });
 
-        // Chart Arduino Nano
-        const ctxAccel = document.getElementById("accelChart").getContext("2d");
-        const accelChart = new Chart(ctxAccel, {
-          type: "line",
-          data: {
-            labels: [],
-            datasets: [
-              {
-                label: "X Axis",
-                borderColor: "#e60073",
-                backgroundColor: "#e60073",
-                data: [],
-                fill: false,
-              },
-              {
-                label: "Y Axis",
-                borderColor: "#7300e6",
-                backgroundColor: "#7300e6",
-                data: [],
-                fill: false,
-              },
-              {
-                label: "Z Axis",
-                borderColor: "#00cc66",
-                backgroundColor: "#00cc66",
-                data: [],
-                fill: false,
-              },
-            ],
+        // Chart ESP32
+        const tempHumChart = new Chart(
+          document.getElementById("tempHumChart").getContext("2d"),
+          {
+            type: "line",
+            data: {
+              labels: [],
+              datasets: [
+                makeDataset("Temperature (°C)", "#ff4d4d"),
+                makeDataset("Humidity (%)", "#3399ff"),
+              ],
+            },
+            options: { responsive: true, animation: false },
           },
-          options: { responsive: true, animation: false },
-        });
+        );
+
+        // Chart Arduino Nano
+        const accelChart = new Chart(
+          document.getElementById("accelChart").getContext("2d"),
+          {
+            type: "line",
+            data: {
+              labels: [],
+              datasets: [
+                makeDataset("X Axis", "#e60073"),
+                makeDataset("Y Axis", "#7300e6"),
+                makeDataset("Z Axis", "#00cc66"),
+              ],
+            },
+            options: { responsive: true, animation: false },
+          },
+        );
+
+        // Ajoute un point (valeurs = une par dataset) et garde MAX_POINTS points
+        function addPoint(chart, label, values) {
+          chart.data.labels.push(label);
+          values.forEach((v, i) => chart.data.datasets[i].data.push(v));
+          while (chart.data.labels.length > MAX_POINTS) {
+            chart.data.labels.shift();
+            chart.data.datasets.forEach((d) => d.data.shift());
+          }
+        }
+
+        const fmtTime = (iso) =>
+          (iso ? new Date(iso) : new Date()).toLocaleTimeString();
 
         async function chargerHistorique() {
           try {
             // Accelerometer (Arduino Nano)
             const nanoRes = await fetch("/nano_data");
             const nanoRows = await nanoRes.json();
-
             if (Array.isArray(nanoRows)) {
-              nanoRows.forEach((row) => {
-                const timeStr = row.datetime
-                  ? new Date(row.datetime).toLocaleTimeString()
-                  : new Date().toLocaleTimeString();
-                accelChart.data.labels.push(timeStr);
-                accelChart.data.datasets[0].data.push(row.x);
-                accelChart.data.datasets[1].data.push(row.y);
-                accelChart.data.datasets[2].data.push(row.z);
-              });
+              nanoRows.forEach((r) =>
+                addPoint(accelChart, fmtTime(r.datetime), [r.x, r.y, r.z]),
+              );
               accelChart.update();
             }
 
@@ -114,16 +108,13 @@
             const espRes = await fetch("/esp_data");
             const espJson = await espRes.json();
             const espRows = espJson.data || espJson;
-
             if (Array.isArray(espRows)) {
-              espRows.forEach((row) => {
-                const timeStr = row.datetime
-                  ? new Date(row.datetime).toLocaleTimeString()
-                  : new Date().toLocaleTimeString();
-                tempHumChart.data.labels.push(timeStr);
-                tempHumChart.data.datasets[0].data.push(row.temperature);
-                tempHumChart.data.datasets[1].data.push(row.humidity);
-              });
+              espRows.forEach((r) =>
+                addPoint(tempHumChart, fmtTime(r.datetime), [
+                  r.temperature,
+                  r.humidity,
+                ]),
+              );
               tempHumChart.update();
             }
           } catch (err) {
@@ -131,42 +122,36 @@
           }
         }
 
-        // Launch of the history loading at startup
-        chargerHistorique();
+        // ---- Temps réel via WebSocket (avec reconnexion automatique) ----
+        const statusEl = document.getElementById("status");
 
-        // update in real-time with WebSocket
+        function connectWS() {
+          const proto = location.protocol === "https:" ? "wss" : "ws";
+          const ws = new WebSocket(`${proto}://${location.host}`);
 
-        const ws = new WebSocket(`ws://${window.location.host}`);
+          ws.onopen = () => (statusEl.textContent = "Temps réel : connecté");
 
-        ws.onmessage = (event) => {
-          const message = JSON.parse(event.data);
-          const timeNow = new Date().toLocaleTimeString();
+          ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            const timeNow = new Date().toLocaleTimeString();
+            const p = message.payload;
 
-          if (message.type === "esp32") {
-            tempHumChart.data.labels.push(timeNow);
-            tempHumChart.data.datasets[0].data.push(
-              message.payload.temperature,
-            );
-            tempHumChart.data.datasets[1].data.push(message.payload.humidity);
-
-            if (tempHumChart.data.labels.length > 20) {
-              tempHumChart.data.labels.shift();
-              tempHumChart.data.datasets.forEach((d) => d.data.shift());
+            if (message.type === "esp32") {
+              addPoint(tempHumChart, timeNow, [p.temperature, p.humidity]);
+              tempHumChart.update();
+            } else if (message.type === "nano") {
+              addPoint(accelChart, timeNow, [p.x, p.y, p.z]);
+              accelChart.update();
             }
-            tempHumChart.update();
-          } else if (message.type === "nano") {
-            accelChart.data.labels.push(timeNow);
-            accelChart.data.datasets[0].data.push(message.payload.x);
-            accelChart.data.datasets[1].data.push(message.payload.y);
-            accelChart.data.datasets[2].data.push(message.payload.z);
+          };
 
-            if (accelChart.data.labels.length > 20) {
-              accelChart.data.labels.shift();
-              accelChart.data.datasets.forEach((d) => d.data.shift());
-            }
-            accelChart.update();
-          }
-        };
+          ws.onclose = () => {
+            statusEl.textContent = "Déconnecté, nouvelle tentative…";
+            setTimeout(connectWS, 2000);
+          };
+        }
+
+        chargerHistorique().then(connectWS);
       });
     </script>
   </body>

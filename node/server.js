@@ -8,6 +8,9 @@ const sensorRoutes = require("./routes/sensorRoutes");
 const sensorController = require("./controllers/sensorController");
 const wsService = require("./services/websocketService");
 
+const HTTP_PORT = 3000;
+const TCP_PORT = 8080;
+
 const app = express();
 const server = http.createServer(app);
 
@@ -21,18 +24,32 @@ wsService.init(server);
 // Montage des routes HTTP
 app.use("/", sensorRoutes);
 
-// Création du serveur TCP (ESP32)
+// Serveur TCP (ESP32) : un message JSON par ligne ('\n' = séparateur).
+// TCP est un flux : un "data" peut contenir plusieurs lignes ou une ligne
+// coupée en deux, d'où le buffer par connexion.
 const tcpServer = net.createServer((socket) => {
-  socket.on("data", (data) => {
-    const payload = data.toString().trim();
-    sensorController.handleEsp32DataTcp(payload);
+  console.log("ESP32 connecté :", socket.remoteAddress);
+  let buffer = "";
+
+  socket.on("data", (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split("\n");
+    buffer = lines.pop(); // dernier morceau, possiblement incomplet
+
+    lines
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .forEach((l) => sensorController.handleEsp32DataTcp(l));
   });
 
+  socket.on("close", () => console.log("ESP32 déconnecté"));
   socket.on("error", (err) => console.error("Erreur TCP:", err.message));
 });
 
 // Lancement des serveurs
-tcpServer.listen(8080, () =>
-  console.log("Serveur TCP (ESP32) sur le port 8080"),
+tcpServer.listen(TCP_PORT, () =>
+  console.log(`Serveur TCP (ESP32) sur le port ${TCP_PORT}`),
 );
-server.listen(3001, () => console.log("Serveur HTTP & WS sur le port 3000"));
+server.listen(HTTP_PORT, () =>
+  console.log(`Serveur HTTP & WS sur le port ${HTTP_PORT}`),
+);

@@ -1,11 +1,19 @@
 const SensorModel = require("../models/sensorModel");
 const wsService = require("../services/websocketService");
 
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+
 const SensorController = {
   // ---- Data Reception ----
 
   handleNanoDataHttp: (req, res) => {
-    const { x, y, z } = req.body;
+    const { x, y, z } = req.body || {};
+
+    if (!isNum(x) || !isNum(y) || !isNum(z)) {
+      return res
+        .status(400)
+        .json({ error: "x, y et z doivent être des nombres" });
+    }
 
     SensorModel.insertNanoData(x, y, z, function (err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -15,21 +23,28 @@ const SensorController = {
     });
   },
 
-  handleEsp32DataTcp: (payload) => {
-    const [temp, hum] = payload.split(",");
-    if (temp && hum) {
-      const temperature = parseFloat(temp);
-      const humidity = parseFloat(hum);
+  // Reçoit UNE ligne JSON : {"temperature":22.5,"humidity":48.0}
+  handleEsp32DataTcp: (line) => {
+    let data;
+    try {
+      data = JSON.parse(line);
+    } catch {
+      return console.error("JSON invalide (ESP32) :", line);
+    }
 
-      SensorModel.insertEspData(temperature, humidity, (err) => {
-        if (err) console.error("Erreur insertion ESP32 :", err.message);
-      });
+    const { temperature, humidity } = data;
+    if (!isNum(temperature) || !isNum(humidity)) {
+      return console.error("Données ESP32 invalides :", line);
+    }
+
+    SensorModel.insertEspData(temperature, humidity, (err) => {
+      if (err) return console.error("Erreur insertion ESP32 :", err.message);
 
       wsService.broadcast({
         type: "esp32",
         payload: { temperature, humidity },
       });
-    }
+    });
   },
 
   // ---- Data Retrieval ----
