@@ -57,7 +57,7 @@ node/
 | DATA (S) | GPIO 17 |
 
 <!-- À VÉRIFIER avec le montage réel, puis ajouter la photo/le schéma : -->
-![Câblage](docs/images/cablage.jpg)
+![Câblage](docs/images/cablage.png)
 
 L'accéléromètre du Nano 33 IoT est intégré à la carte (puce LSM6DS3), aucun câblage n'est nécessaire.
 
@@ -88,7 +88,7 @@ La base `iot_data.db` est créée automatiquement au premier lancement. Vérifie
 **Paramètres à adapter dans les sketches** :
 
 | Constante | Sketch | Valeur |
-|---|---|---|
+|---|---|---|a
 | `WIFI_SSID`, `WIFI_PASS` | les deux | identifiants du WiFi |
 | `SERVER_IP` | les deux | IP de l'ordinateur qui fait tourner Node (`hostname -I`) |
 | `USE_STATIC_IP` | ESP32 | `false` en DHCP (voir ci-dessous) |
@@ -201,8 +201,6 @@ Vérifications effectuées avec les deux cartes :
 | `/nano_data` | ![nano_data](docs/images/nano_data.png) |
 | `/esp_data` | ![esp_data](docs/images/esp_data.png) |
 | Base SQLite | ![sqlite](docs/images/sqlite.png) |
-| Moniteur série ESP32 | ![esp32](docs/images/serial_esp32.png) |
-| Moniteur série Nano | ![nano](docs/images/serial_nano.png) |
 
 ## Limites connues
 
